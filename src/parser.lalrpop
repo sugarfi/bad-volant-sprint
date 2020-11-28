@@ -1,0 +1,94 @@
+use crate::ast::{Type, Node};
+
+grammar;
+
+Int: Node =
+    r"[0-9]+" => Node::Int(<>.to_string());
+
+Name: Node =
+    r"[a-zA-Z_][a-zA-Z_0-9]*" => Node::Name(<>.to_string());
+
+Literal: Node = {
+    Int,
+    Name
+}
+
+Op: Node = {
+    <l:Literal> <op:r"(\+|-|\*|/|%|\^|&|\||<<|>>|<|>|<=|>=|==|!=)"> <r:Expr> => Node::Op(op.to_string(), Box::new(l), Box::new(r))
+};
+
+Type: Node = {
+    "u8" => Node::Type(Type::Uint8),
+    "u16" => Node::Type(Type::Uint16),
+    "u32" => Node::Type(Type::Uint32),
+    "u64" => Node::Type(Type::Uint64),
+    "i8" => Node::Type(Type::Int8),
+    "i16" => Node::Type(Type::Int16),
+    "i32" => Node::Type(Type::Int32),
+    "i64" => Node::Type(Type::Int64)
+};
+
+Expr: Node = {
+    Int,
+    Name,
+    Op
+};
+
+Assign: Node =
+    "let" <name:r"[a-zA-Z_][a-zA-Z_0-9]*"> ":" <t:Type> "=" <value:Expr> =>
+        Node::Assign(name.to_string(), Box::new(t), Box::new(value));
+
+Re: Node =
+    <name:r"[a-zA-Z_][a-zA-Z_0-9]*"> "=" <value:Expr> => Node::Re(name.to_string(), Box::new(value));
+
+Return: Node =
+    "return" <Expr> => Node::Return(Box::new(<>));
+
+If: Node = {
+    "if" <e:Expr> <body:Block> "else" <other:Block> => Node::If(Box::new(e), Box::new(body), Some(Box::new(other))),
+   "if" <e:Expr> <body:Block> => Node::If(Box::new(e), Box::new(body), None)
+};
+
+While: Node = {
+    "while" <e:Expr> <body:Block> => Node::While(Box::new(e), Box::new(body))
+};
+
+Stmt = {
+    Assign,
+    Re,
+    Return,
+    If,
+    While
+}
+
+StmtList: Vec<Node> = {
+    <Stmt> ";" => vec![<>],
+    <head:StmtList> <tail:Stmt> ";" => vec![head, vec![tail]].concat()
+};
+
+Block: Node = {
+    "{" "}" => Node::Block(vec![]),
+    "{" <body:StmtList> "}" => Node::Block(body)
+};
+
+ArgList2: Vec<(String, Node)> = {
+    <name:r"[a-zA-Z_][a-zA-Z_0-9]*"> ":" <t:Type> => vec![(name.to_string(), t)],
+    <head:ArgList2> "," <tail_name:r"[a-zA-Z_][a-zA-Z_0-9]*"> ":" <tail_type:Type> => vec![head, vec![(tail_name.to_string(), tail_type)]].concat()
+};
+
+ArgList: Vec<(String, Node)> = {
+    "(" ")" => vec![],
+    "(" <ArgList2> ")" => <>
+};
+
+Func: Node =
+    "func" <name:r"[a-zA-Z_][a-zA-Z_0-9]*"> <args:ArgList> ":" <ret:Type> <body:Block> => Node::Func(name.to_string(), args, Box::new(ret), Box::new(body));
+
+Top: Node = {
+    Func
+}
+
+pub Program: Vec<Node> = {
+    <Top> => vec![<>],
+    <head:Program> <tail:Top> => vec![head, vec![tail]].concat()
+}
